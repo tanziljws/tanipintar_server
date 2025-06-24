@@ -1,3 +1,6 @@
+const fs = require('fs')
+const https = require('https')
+const path = require('path')
 const app = require('./app')
 const pool = require('./src/config/db')
 
@@ -7,16 +10,20 @@ app.get('/', (req, res) => {
   res.send('Hello World!')
 })
 
+const sslOptions = {
+  key: fs.readFileSync(path.join(__dirname, 'cert/key.pem')),
+  cert: fs.readFileSync(path.join(__dirname, 'cert/cert.pem')),
+}
+
 // ⬇️ Simpan ke variabel server
-const server = app.listen(PORT, () => {
-  console.log(`Server running on http://localhost:${PORT}`)
+const server = https.createServer(sslOptions, app).listen(PORT, () => {
+  console.log(`✅ HTTPS Server running at https://localhost:${PORT}`);
 })
 
 const shutdown = () => {
   console.log('\nShutting down gracefully...')
   server.close(() => {
     console.log('HTTP server closed')
-
     pool.end()
       .then(() => {
         console.log('Database pool has ended')
