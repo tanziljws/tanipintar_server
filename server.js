@@ -1,40 +1,47 @@
+require('dotenv').config()
+
 const fs = require('fs')
 const https = require('https')
 const path = require('path')
+
+const { connectRedis } = require('./src/utils/tokenBlacklist')
+const { pool, connectToDatabase } = require('./src/config/db')
 const app = require('./app')
-const pool = require('./src/config/db')
+const logger = require('./src/utils/logger')
 
 const PORT = process.env.PORT || 4000
 
-app.get('/', (req, res) => {
-  res.send('Hello World!')
-})
-
 const sslOptions = {
-  key: fs.readFileSync(path.join(__dirname, 'cert/key.pem')),
-  cert: fs.readFileSync(path.join(__dirname, 'cert/cert.pem')),
+  key: fs.readFileSync(path.join(__dirname, 'certs/key.pem')),
+  cert: fs.readFileSync(path.join(__dirname, 'certs/cert.pem')),
 }
 
-// ⬇️ Simpan ke variabel server
-const server = https.createServer(sslOptions, app).listen(PORT, () => {
-  console.log(`✅ HTTPS Server running at https://localhost:${PORT}`);
-})
+const startServer = async () => {
+  await connectToDatabase()
+  await connectRedis()
 
-const shutdown = () => {
-  console.log('\nShutting down gracefully...')
-  server.close(() => {
-    console.log('HTTP server closed')
-    pool.end()
-      .then(() => {
-        console.log('Database pool has ended')
-        process.exit(0)
-      })
-      .catch((err) => {
-        console.error('Error closing DB pool:', err)
-        process.exit(1)
-      })
+  const server = https.createServer(sslOptions, app).listen(PORT, () => {
+    logger.info(`✅ HTTPS Server running at https://localhost:${PORT}`)
   })
+
+  const shutdown = () => {
+    logger.info('Shutting down gracefully...')
+    server.close(() => {
+      logger.info('HTTPS server closed')
+      pool.end()
+        .then(() => {
+          logger.info('Database pool has ended')
+          setTimeout(() => process.exit(0), 200)
+        })
+        .catch((err) => {
+          logger.error(`Error closing DB pool: ${err}`)
+          setTimeout(() => process.exit(1), 200)
+        })
+    })
+  }
+
+  process.on('SIGINT', shutdown)
+  process.on('SIGTERM', shutdown)
 }
 
-process.on('SIGINT', shutdown)
-process.on('SIGTERM', shutdown)
+startServer()

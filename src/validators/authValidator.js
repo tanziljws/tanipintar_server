@@ -16,28 +16,49 @@ const registerValidation = [
     .trim()
     .notEmpty().withMessage('Nama lengkap wajib diisi')
     .bail()
-    .isLength({ min: 2, max: 100 }).withMessage('Nama lengkap harus 2-100 karakter')
-    .bail()
-    .matches(/^[a-zA-Z\s.]+$/).withMessage('Nama hanya boleh huruf, spasi, dan titik')
     .custom(name => {
+      const cleaned = name.toLowerCase()
       const blacklist = ['admin', 'test', 'null']
-      if (blacklist.includes(name.toLowerCase())) {
-        throw new Error('Nama tidak diperbolehkan')
+
+      for (const word of blacklist) {
+        if (cleaned.includes(word)) {
+          throw new Error('Nama tidak diperbolehkan')
+        }
       }
+
+      if (cleaned.replace(/\s+/g, '').length < 4) {
+        throw new Error('Nama terlalu pendek, minimal 4 karakter')
+      }
+
+      if (/([a-zA-Z])\1{4,}/.test(cleaned)) {
+        throw new Error('Nama tidak boleh huruf yang sama berulang terlalu banyak')
+      }
+
+      if (/[bcdfghjklmnpqrstvwxyz]{4,}/i.test(cleaned)) {
+        throw new Error('Nama terlalu banyak konsonan berurutan, tidak valid')
+      }
+
+      if (cleaned.length > 100) {
+        throw new Error('Nama terlalu panjang, maksimal 100 karakter')
+      }
+
       return true
-    }),
+    })
+    .bail()
+    .matches(/^[a-zA-Z\s.]+$/).withMessage('Nama hanya boleh huruf, spasi, dan titik'),
+
 
   body('ktp_number')
     .trim()
     .notEmpty().withMessage('Nomor KTP wajib diisi')
     .bail()
-    .isLength({ min: 16, max: 16 }).withMessage('Nomor KTP harus 16 digit')
-    .bail()
     .isNumeric().withMessage('Nomor KTP hanya boleh angka')
+    .bail()
+    .isLength({ min: 16, max: 16 }).withMessage('Nomor KTP harus 16 digit')
     .bail()
     .custom(value => {
       if (!/^([1-9]\d{15})$/.test(value)) {
-        throw new Error('Nomor KTP tidak valid')
+        throw new Error('Nomor KTP tidak boleh diawali dengan angka 0')
       }
       return true
     }),
@@ -125,4 +146,8 @@ const loginValidation = [
     .matches(/^\S+$/).withMessage('Password tidak boleh mengandung spasi')
 ]
 
-module.exports = { registerValidation, loginValidation }
+const updateProfileValidation = [
+  body('email').notEmpty().withMessage('Emai wajib diisi')
+]
+
+module.exports = { registerValidation, loginValidation, updateProfileValidation }

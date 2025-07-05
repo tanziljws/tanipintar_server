@@ -1,29 +1,45 @@
 const rateLimit = require('express-rate-limit')
-const fs = require('fs')
-const path = require('path')
+const logger = require('../utils/logger')
 
-// Path log file
-const logFilePath = path.join(__dirname, '../logs/rate-limit.log')
-
-// Logging function
-function logRateLimit(ip, url) {
-  const log = `[${new Date().toISOString()}] IP ${ip} exceeded rate limit on ${url}\n`
-  fs.appendFile(logFilePath, log, (err) => {
-    if (err) console.error('Error writing rate limit log:', err)
-  })
+const isLocalhost = (ip) => {
+  return (
+    ip === '::1' ||        // IPv6 localhost
+    ip === '127.0.0.1' ||  // IPv4 localhost
+    ip === '::ffff:127.0.0.1' // IPv4 localhost through IPv6
+  )
 }
 
-// Rate limiter setup
-const limiter = rateLimit({
-  windowMs: 1 * 60 * 1000, // 1 menit
-  max: 10, // max 10 request per menit per IP
+const logLimit = (req) => {
+  logger.warn(`[RateLimit] IP: ${req.ip}, URL: ${req.originalUrl}, Agent: ${req.headers['user-agent']}`)
+}
+
+const loginRateLimiter = rateLimit({
+  windowMs: 60 * 1000,  // 1 menit
+  max: 5,
+  skip: (req, res) => isLocalhost(req.ip), // <- SKIP LIMIT jika localhost
   handler: (req, res) => {
-    logRateLimit(req.ip, req.originalUrl)
+    logLimit(req)
     return res.status(429).json({
       status: 'fail',
-      message: 'Terlalu banyak permintaan. Coba lagi nanti.',
+      message: 'Terlalu banyak percobaan login. Coba lagi nanti.',
     })
-  },
+  }
 })
 
-module.exports = limiter
+const registerRateLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 3,
+  skip: (req, res) => isLocalhost(req.ip), // <- SKIP LIMIT jika localhost
+  handler: (req, res) => {
+    logLimit(req)
+    return res.status(429).json({
+      status: 'fail',
+      message: 'Terlalu banyak pendaftaran. Coba lagi nanti.',
+    })
+  }
+})
+
+module.exports = {
+  registerRateLimiter,
+  loginRateLimiter
+}

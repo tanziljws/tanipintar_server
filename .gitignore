@@ -136,4 +136,4 @@ dist
 .pnp.*
 
 # SSL Certificate
-cert/
+certs/
