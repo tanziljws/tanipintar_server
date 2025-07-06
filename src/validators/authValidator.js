@@ -146,8 +146,4 @@ const loginValidation = [
     .matches(/^\S+$/).withMessage('Password tidak boleh mengandung spasi')
 ]
 
-const updateProfileValidation = [
-  body('email').notEmpty().withMessage('Emai wajib diisi')
-]
-
-module.exports = { registerValidation, loginValidation, updateProfileValidation }
+module.exports = { registerValidation, loginValidation }

@@ -1,9 +1,8 @@
 require('dotenv').config()
 
-const fs = require('fs')
-const https = require('https')
-const path = require('path')
+const http = require('http')
 
+const { connectMQTT } = require('./src/services/mqttService')
 const { connectRedis } = require('./src/utils/tokenBlacklist')
 const { pool, connectToDatabase } = require('./src/config/db')
 const app = require('./app')
@@ -11,23 +10,19 @@ const logger = require('./src/utils/logger')
 
 const PORT = process.env.PORT || 4000
 
-const sslOptions = {
-  key: fs.readFileSync(path.join(__dirname, 'certs/key.pem')),
-  cert: fs.readFileSync(path.join(__dirname, 'certs/cert.pem')),
-}
-
 const startServer = async () => {
   await connectToDatabase()
   await connectRedis()
+  connectMQTT()
 
-  const server = https.createServer(sslOptions, app).listen(PORT, () => {
-    logger.info(`✅ HTTPS Server running at https://localhost:${PORT}`)
+  const server = http.createServer(app).listen(PORT, '0.0.0.0', () => {
+    logger.info(`✅ HTTP Server running at http://0.0.0.0:${PORT}`)
   })
 
   const shutdown = () => {
     logger.info('Shutting down gracefully...')
     server.close(() => {
-      logger.info('HTTPS server closed')
+      logger.info('HTTP server closed')
       pool.end()
         .then(() => {
           logger.info('Database pool has ended')
