@@ -1,49 +1,56 @@
 const express = require('express')
 const router = express.Router()
-const { 
-    getLatestSensorData, 
-    startDiscoveryMode, 
-    getDiscoveredDevices,
-    pairWithDevice 
-} = require('../services/mqttService')
 
-router.get('/latest', (req, res) => {
-    const data = getLatestSensorData()
+const { controlPump } = require('../services/mqttClient')
+const {
+    getDeviceStatus,
+    getDeviceLastSeen,
+    getKnownDevices
+} = require('../services/mqttHandler')
 
-    if (!data) {
-        return res.status(404).json({
-            success: false,
-            error: 'No sensor data available yet'
+// ✅ Kontrol Pompa
+// Endpoint: POST /api/sensors/pump/control
+router.post('/pump/control', (req, res) => {
+    const { nodeId, relay, state } = req.body
+
+    if (!nodeId || typeof relay !== 'number' || typeof state !== 'boolean') {
+        return res.status(400).json({
+            message: 'Field "nodeId" (string), "relay" (number), dan "state" (boolean) wajib diisi.'
         })
     }
 
-    return res.status(200).json({
-        success: true,
-        data
-    })
+    try {
+        controlPump(nodeId, relay, state)
+        return res.status(200).json({
+            message: `Kontrol pompa dikirim ke node "${nodeId}"`
+        })
+    } catch (err) {
+        return res.status(500).json({
+            message: 'Gagal mengirim kontrol pompa',
+            error: err.message
+        })
+    }
 })
 
-// Start device discovery mode
-router.post('/discover', (req, res) => {
-    const result = startDiscoveryMode()
-    return res.status(result.success ? 200 : 400).json(result)
+// ✅ Get Semua Perangkat yang Dikenal
+// Endpoint: GET /api/sensors/devices
+router.get('/devices', (req, res) => {
+    const devices = getKnownDevices()
+    return res.status(200).json({ devices })
 })
 
-// Get discovered devices
-router.get('/discover', (req, res) => {
-    const devices = getDiscoveredDevices()
-    return res.status(200).json({
-        success: true,
-        count: devices.length,
-        devices
-    })
+// ✅ Get Status Perangkat
+// Endpoint: GET /api/sensors/devices/status
+router.get('/devices/status', (req, res) => {
+    const statuses = getDeviceStatus()
+    return res.status(200).json({ statuses })
 })
 
-// Pair with a specific device
-router.post('/pair/:deviceId', (req, res) => {
-    const { deviceId } = req.params
-    const result = pairWithDevice(deviceId)
-    return res.status(result.success ? 200 : 404).json(result)
+// ✅ Get Last Seen Perangkat
+// Endpoint: GET /api/sensors/devices/lastseen
+router.get('/devices/lastseen', (req, res) => {
+    const lastSeen = getDeviceLastSeen()
+    return res.status(200).json({ lastSeen })
 })
 
 module.exports = router

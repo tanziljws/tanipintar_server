@@ -19,7 +19,7 @@ const sslConfig = useSSL
     ca: fs.readFileSync(path.join(__dirname, '../../certs/global-bundle.pem')).toString()
   }
   : false
-logger.info(`Database SSL enabled: ${useSSL}`)
+logger.info(`DATABASE SSL ENABLED: ${useSSL}`)
 
 const pool = new Pool({
   host: process.env.DB_HOST,

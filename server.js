@@ -1,10 +1,8 @@
 require('dotenv').config()
 
-const http = require('http')
-
-const { connectMQTT } = require('./src/services/mqttService')
 const { connectRedis } = require('./src/utils/tokenBlacklist')
 const { pool, connectToDatabase } = require('./src/config/db')
+const { initMQTT } = require('./src/services/mqttClient')
 const app = require('./app')
 const logger = require('./src/utils/logger')
 
@@ -13,11 +11,14 @@ const PORT = process.env.PORT || 4000
 const startServer = async () => {
   await connectToDatabase()
   await connectRedis()
-  connectMQTT()
+  await require('./src/services/mqttClient')
 
-  const server = http.createServer(app).listen(PORT, '0.0.0.0', () => {
-    logger.info(`✅ HTTP Server running at http://0.0.0.0:${PORT}`)
+  const server = app.listen(PORT, '0.0.0.0', () => {
+    logger.info(`HTTP Server running at http://0.0.0.0:${PORT}`)
   })
+
+
+  await initMQTT()
 
   const shutdown = () => {
     logger.info('Shutting down gracefully...')
