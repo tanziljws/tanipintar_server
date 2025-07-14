@@ -2,7 +2,7 @@ const { pool } = require('../config/db')
 
 const createGarden = async (req, res, next) => {
   try {
-    const { name, location, area, area_unit, crop_type } = req.body
+    const { name, area, area_unit } = req.body
 
     const result = await pool.query(
       `INSERT INTO garden (user_id, name, area, area_unit)
