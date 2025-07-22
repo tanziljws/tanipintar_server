@@ -17,7 +17,6 @@ const startServer = async () => {
     logger.info(`HTTP Server running at http://0.0.0.0:${PORT}`)
   })
 
-
   await initMQTT()
 
   const shutdown = () => {
@@ -35,7 +34,6 @@ const startServer = async () => {
         })
     })
   }
-
   process.on('SIGINT', shutdown)
   process.on('SIGTERM', shutdown)
 }

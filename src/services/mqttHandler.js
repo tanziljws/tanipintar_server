@@ -27,10 +27,18 @@ function handleIncomingMessage(topic, message) {
         // === Tangani status pompa ===
         if (topic.startsWith('kebun/pompa/') && topic.endsWith('/status')) {
             let id = topic.split('/')[2]
+            const payload = payloadStr.trim().toLowerCase()
+
+            if (payload === 'online' || payload === 'offline') {
+                deviceLastSeen[id] = Date.now()
+                deviceStatus[id] = payload
+                logger.info(`[STATUS] Pump Device "${id}" is ${payload.toUpperCase()}`)
+                return
+            }
+
             try {
                 const statusPayload = JSON.parse(payloadStr)
 
-                // Simpan status lengkap hanya jika JSON valid
                 id = statusPayload.id || id
                 pumpStatus[id] = statusPayload
                 deviceLastSeen[id] = Date.now()
@@ -42,17 +50,12 @@ function handleIncomingMessage(topic, message) {
 
                 logger.info(`[POMPA-STATUS] "${id}": Relay States = ${relayStateString(statusPayload)}, Uptime = ${statusPayload.uptime || '-'}s`)
             } catch (err) {
-                // Jika payload bukan JSON, misalnya hanya "offline"
-                if (payloadStr.trim().toLowerCase() === 'offline') {
-                    deviceStatus[id] = 'offline'
-                    logger.info(`[STATUS] Pump Device "${id}" is OFFLINE`)
-                } else {
-                    logger.warn(`[POMPA-STATUS] Invalid JSON on topic "${topic}": ${err.message}`)
-                }
+                logger.warn(`[POMPA-STATUS] Invalid JSON on topic "${topic}": ${err.message}`)
             }
 
             return
         }
+
 
         // === Tangani perintah kontrol pompa ===
         if (topic.startsWith('kebun/pompa/') && topic.endsWith('/control')) {

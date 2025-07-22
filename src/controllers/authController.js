@@ -24,7 +24,6 @@ const register = async (req, res, next) => {
     }
 
     const formattedBirthdate = moment(birthdate, 'DD-MM-YYYY').format('YYYY-MM-DD')
-
     const password_hash = await hashPassword(password)
 
     await pool.query(`
@@ -102,7 +101,5 @@ const logout = async (req, res, next) => {
     next(err)
   }
 }
-
-
 
 module.exports = { register, login, logout }
