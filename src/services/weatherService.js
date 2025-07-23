@@ -5,20 +5,52 @@ class WeatherService {
     constructor() {
         this.baseUrl = "https://api.open-meteo.com/v1"
         this.geocodingUrl = "https://geocoding-api.open-meteo.com/v1/search"
+        // Add timeout and retry configuration
+        this.axiosConfig = {
+            timeout: 10000, // 10 seconds timeout
+            retry: 3,
+            retryDelay: 1000 // 1 second delay between retries
+        }
     }
 
     /**
-     * Mendapatkan koordinat berdasarkan nama kota
-     * Sesuai dengan getCoordinates() di Flutter
+     * Retry wrapper for axios requests
+     */
+    async _retryRequest(requestFn, retries = 3, delay = 1000) {
+        for (let i = 0; i < retries; i++) {
+            try {
+                return await requestFn()
+            } catch (error) {
+                logger.weather(`Request attempt ${i + 1} failed: ${error.message}`)
+
+                if (i === retries - 1) {
+                    throw error
+                }
+
+                // Wait before retrying
+                await new Promise(resolve => setTimeout(resolve, delay))
+                delay *= 2 // Exponential backoff
+            }
+        }
+    }
+
+    /**
+     * Mendapatkan koordinat berdasarkan nama kota dengan retry logic
      */
     async getCoordinates(city) {
         try {
             logger.weather(`Getting coordinates for city: ${city}`)
 
-            const response = await axios.get(`${this.geocodingUrl}?name=${city}&count=1&language=id&format=json`)
+            const response = await this._retryRequest(async () => {
+                return await axios.get(
+                    `${this.geocodingUrl}?name=${city}&count=1&language=id&format=json`,
+                    { timeout: this.axiosConfig.timeout }
+                )
+            }, this.axiosConfig.retry, this.axiosConfig.retryDelay)
 
             if (response.status === 200 && response.data.results && response.data.results.length > 0) {
                 const result = response.data.results[0]
+                logger.weather(`Successfully found coordinates for ${city}: ${result.latitude}, ${result.longitude}`)
                 return {
                     latitude: result.latitude,
                     longitude: result.longitude,
@@ -26,31 +58,93 @@ class WeatherService {
                     country: result.country,
                 }
             } else {
-                // Default ke Jakarta jika tidak ditemukan (sama seperti Flutter)
-                logger.weather(`City ${city} not found, using Jakarta as default`)
-                return {
-                    latitude: -6.2088,
-                    longitude: 106.8456,
-                    name: "Jakarta",
-                    country: "Indonesia",
-                }
+                logger.weather(`City ${city} not found in geocoding results, using Jakarta as default`)
+                return this._getDefaultCoordinates()
             }
         } catch (error) {
-            logger.error(`Error getting coordinates for ${city}: ${error.message}`)
-            error.source = "weather"
-            // Return default Jakarta coordinates (sama seperti Flutter)
-            return {
-                latitude: -6.2088,
-                longitude: 106.8456,
-                name: "Jakarta",
-                country: "Indonesia",
+            logger.error(`Error getting coordinates for ${city} after retries: ${error.message}`)
+
+            // Log specific error types for better debugging
+            if (error.code === 'EAI_AGAIN') {
+                logger.error(`DNS resolution failed for geocoding API. Check internet connection.`)
+            } else if (error.code === 'ECONNABORTED') {
+                logger.error(`Request timeout when connecting to geocoding API.`)
+            } else if (error.code === 'ENOTFOUND') {
+                logger.error(`Geocoding API host not found. Check DNS settings.`)
             }
+
+            error.source = "weather"
+            return this._getDefaultCoordinates()
+        }
+    }
+
+    /**
+     * Get default coordinates (Jakarta)
+     */
+    _getDefaultCoordinates() {
+        return {
+            latitude: -6.2088,
+            longitude: 106.8456,
+            name: "Jakarta",
+            country: "Indonesia",
+        }
+    }
+
+    /**
+     * Mendapatkan data cuaca berdasarkan koordinat dengan retry logic
+     */
+    async getWeatherByCoordinates(lat, lon, cityName = null, country = null) {
+        try {
+            logger.weather(`Getting weather for coordinates: ${lat}, ${lon}`)
+
+            const params = {
+                latitude: lat.toString(),
+                longitude: lon.toString(),
+                current:
+                    "temperature_2m,relative_humidity_2m,precipitation,weather_code,wind_speed_10m,wind_direction_10m,pressure_msl",
+                hourly: "temperature_2m,precipitation_probability,weather_code",
+                daily: "weather_code,temperature_2m_max,temperature_2m_min,precipitation_sum,precipitation_probability_max",
+                timezone: "auto",
+                forecast_days: "7",
+            }
+
+            const response = await this._retryRequest(async () => {
+                return await axios.get(`${this.baseUrl}/forecast`, {
+                    params,
+                    timeout: this.axiosConfig.timeout
+                })
+            }, this.axiosConfig.retry, this.axiosConfig.retryDelay)
+
+            if (response.status === 200) {
+                const data = response.data
+
+                if (cityName && country) {
+                    data.city_name = cityName
+                    data.country = country
+                }
+
+                logger.weather(`Successfully retrieved weather data for ${cityName || 'coordinates'}`)
+                return data
+            } else {
+                throw new Error(`Failed to get weather data: ${response.status}`)
+            }
+        } catch (error) {
+            logger.error(`Error getting weather data after retries: ${error.message}`)
+
+            // Log specific error types
+            if (error.code === 'EAI_AGAIN') {
+                logger.error(`DNS resolution failed for weather API. Check internet connection.`)
+            } else if (error.code === 'ECONNABORTED') {
+                logger.error(`Request timeout when connecting to weather API.`)
+            }
+
+            error.source = "weather"
+            throw error
         }
     }
 
     /**
      * Mendapatkan data cuaca berdasarkan kota
-     * Sesuai dengan getWeatherByCity() di Flutter
      */
     async getWeatherByCity(city) {
         try {
@@ -69,47 +163,7 @@ class WeatherService {
     }
 
     /**
-     * Mendapatkan data cuaca berdasarkan koordinat
-     * Sesuai dengan getWeatherByCoordinates() di Flutter
-     */
-    async getWeatherByCoordinates(lat, lon, cityName = null, country = null) {
-        try {
-            logger.weather(`Getting weather for coordinates: ${lat}, ${lon}`)
-
-            const params = {
-                latitude: lat.toString(),
-                longitude: lon.toString(),
-                current:
-                    "temperature_2m,relative_humidity_2m,precipitation,weather_code,wind_speed_10m,wind_direction_10m,pressure_msl",
-                hourly: "temperature_2m,precipitation_probability,weather_code",
-                daily: "weather_code,temperature_2m_max,temperature_2m_min,precipitation_sum,precipitation_probability_max",
-                timezone: "auto",
-                forecast_days: "7",
-            }
-
-            const response = await axios.get(`${this.baseUrl}/forecast`, { params })
-
-            if (response.status === 200) {
-                const data = response.data
-
-                if (cityName && country) {
-                    data.city_name = cityName
-                    data.country = country
-                }
-
-                return data
-            } else {
-                throw new Error(`Failed to get weather data: ${response.status}`)
-            }
-        } catch (error) {
-            error.source = "weather"
-            throw error
-        }
-    }
-
-    /**
      * Mendapatkan prakiraan cuaca berdasarkan kota
-     * Sesuai dengan getForecastByCity() di Flutter
      */
     async getForecastByCity(city) {
         return await this.getWeatherByCity(city)
@@ -117,7 +171,6 @@ class WeatherService {
 
     /**
      * Mendapatkan prakiraan cuaca berdasarkan koordinat
-     * Sesuai dengan getForecastByCoordinates() di Flutter
      */
     async getForecastByCoordinates(lat, lon) {
         return await this.getWeatherByCoordinates(lat, lon)
@@ -125,7 +178,6 @@ class WeatherService {
 
     /**
      * Format data cuaca menjadi teks yang mudah dibaca
-     * Sesuai dengan formatWeatherData() di Flutter
      */
     formatWeatherData(weatherData) {
         try {
@@ -149,7 +201,6 @@ class WeatherService {
 
     /**
      * Mendapatkan deskripsi cuaca berdasarkan kode cuaca dari Open-Meteo
-     * Sesuai dengan _getWeatherDescription() di Flutter
      */
     _getWeatherDescription(code) {
         const weatherCodes = {
@@ -188,7 +239,6 @@ class WeatherService {
 
     /**
      * Format data prakiraan cuaca menjadi teks yang mudah dibaca
-     * Sesuai dengan formatForecastData() di Flutter
      */
     formatForecastData(forecastData) {
         try {
@@ -224,7 +274,6 @@ class WeatherService {
 
     /**
      * Helper untuk memformat tanggal ke bentuk hari dan tanggal
-     * Sesuai dengan _formatDate() di Flutter
      */
     _formatDate(date) {
         const now = new Date()
