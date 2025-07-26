@@ -137,3 +137,6 @@ dist
 
 # SSL Certificate
 certs/
+
+# Redis Dump
+dump.rdb
