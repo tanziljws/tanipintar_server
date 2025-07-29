@@ -1,4 +1,4 @@
-const moment = require('moment')
+const { format } = require('date-fns')
 
 const { hashPassword, comparePassword } = require('../utils/hash')
 const { pool } = require('../config/db')
@@ -10,7 +10,7 @@ const getProfile = async (req, res, next) => {
     const result = await pool.query('SELECT email, full_name, ktp_number, birthplace, birthdate FROM users WHERE id = $1', [req.user.id])
     const user = result.rows[0]
 
-    const formattedBirthdate = moment(user.birthdate).format('DD-MM-YYYY')
+    const formattedBirthdate = format(new Date(user.birthdate), 'dd-MM-yyyy')
 
     res.json({
       user: {
@@ -30,25 +30,25 @@ const getProfile = async (req, res, next) => {
 // UPDATE PROFILE
 const updateProfile = async (req, res, next) => {
   try {
-    const { email, password } = req.body;
+    const { email, password, current_password } = req.body
 
     if (email) {
       const existingUser = await pool.query(
         'SELECT id FROM users WHERE email = $1 AND id != $2',
         [email, req.user.id]
-      );
+      )
 
       if (existingUser.rows.length > 0) {
-        return res.status(409).json({ message: 'Email sudah digunakan oleh user lain' });
+        return res.status(409).json({ message: 'Email sudah digunakan oleh user lain' })
       }
 
       await pool.query(
         'UPDATE users SET email = $1 WHERE id = $2',
         [email, req.user.id]
-      );
+      )
 
-      logger.auth(`Update email: ${req.user.email} -> ${email}`);
-      updateMessage = 'Email berhasil diperbarui';
+      logger.auth(`Update email: ${req.user.email} -> ${email}`)
+      updateMessage = 'Email berhasil diperbarui'
     }
 
     if (password) {
@@ -99,7 +99,7 @@ const updateProfile = async (req, res, next) => {
     return res.status(200).json({
       message: updateMessage || 'Profil berhasil diperbarui',
       success: true
-    });
+    })
   } catch (err) {
     err.source = 'updateProfile'
     next(err)

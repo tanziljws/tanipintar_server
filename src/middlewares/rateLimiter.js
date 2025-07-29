@@ -9,10 +9,9 @@ const isLocalhost = (ip) => {
   )
 }
 
-// Existing rate limiters dari file asli Anda
 const loginRateLimiter = rateLimit({
-  windowMs: 60 * 1000, // 1 menit
-  max: 5,
+  windowMs: 5 * 60 * 1000, // 5 menit
+  max: 5, // maksimal 5 permintaan login per 5 menit
   skip: (req, res) => isLocalhost(req.ip),
   handler: (req, res) => {
     logLimit(req)
@@ -23,9 +22,22 @@ const loginRateLimiter = rateLimit({
   },
 })
 
+const refreshRateLimiter = rateLimit({
+  windowMs: 60 * 1000, // 1 menit
+  max: 10, // maksimal 10 permintaan refresh per menit
+  skip: (req, res) => isLocalhost(req.ip),
+  handler: (req, res) => {
+    logLimit(req)
+    return res.status(429).json({
+      status: "fail",
+      message: "Terlalu sering me-refresh token. Coba lagi sebentar lagi.",
+    })
+  },
+})
+
 const registerRateLimiter = rateLimit({
-  windowMs: 60 * 1000,
-  max: 3,
+  windowMs: 24 * 60 * 60 * 1000, // 1 hari
+  max: 3, // maksimal 3 permintaan register per hari
   skip: (req, res) => isLocalhost(req.ip),
   handler: (req, res) => {
     logLimit(req)
@@ -36,36 +48,8 @@ const registerRateLimiter = rateLimit({
   },
 })
 
-// New rate limiters untuk chatbot dan weather
-const chatbotRateLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 menit
-  max: 50, // maksimal 50 request per 15 menit
-  skip: (req, res) => isLocalhost(req.ip),
-  handler: (req, res) => {
-    logLimit(req)
-    return res.status(429).json({
-      status: "fail",
-      message: "Terlalu banyak request ke chatbot. Silakan coba lagi nanti.",
-    })
-  },
-})
-
-const weatherRateLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 menit
-  max: 100, // maksimal 100 request per 15 menit
-  skip: (req, res) => isLocalhost(req.ip),
-  handler: (req, res) => {
-    logLimit(req)
-    return res.status(429).json({
-      status: "fail",
-      message: "Terlalu banyak request ke weather API. Silakan coba lagi nanti.",
-    })
-  },
-})
-
 module.exports = {
-  registerRateLimiter,
   loginRateLimiter,
-  chatbotRateLimiter,
-  weatherRateLimiter,
+  refreshRateLimiter,
+  registerRateLimiter
 }

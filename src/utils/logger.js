@@ -1,6 +1,6 @@
 const { createLogger, format, transports } = require("winston")
+const { formatInTimeZone } = require("date-fns-tz")
 const DailyRotateFile = require("winston-daily-rotate-file")
-const moment = require("moment-timezone")
 const path = require("path")
 
 const isDevelopment = process.env.NODE_ENV === "development"
@@ -8,9 +8,12 @@ const isDevelopment = process.env.NODE_ENV === "development"
 const logger = createLogger({
   format: format.combine(
     format.timestamp({
-      format: () => moment().tz("Asia/Jakarta").format("YYYY-MM-DD HH:mm:ss"),
+      format: () => {
+        const now = new Date()
+        return formatInTimeZone(now, "Asia/Jakarta", "yyyy-MM-dd HH:mm:ss")
+      },
     }),
-    format.printf(({ timestamp, level, message }) => `[${timestamp}] ${level.toUpperCase()}: ${message}`),
+    format.printf(({ timestamp, level, message }) => `[${timestamp}] ${level.toUpperCase()}: ${message}`)
   ),
   transports: [
     new DailyRotateFile({
@@ -24,14 +27,13 @@ const logger = createLogger({
   ],
 })
 
-// Existing methods
+logger.api = (message) => logger.info(`[API] ${message}`)
+
 logger.auth = (message) => logger.info(`[AUTH] ${message}`)
 logger.audit = (message) => logger.info(`[AUDIT] ${message}`)
 logger.security = (message) => logger.warn(`[SECURITY] ${message}`)
 
-// New methods for chatbot and weather
 logger.chatbot = (message) => logger.info(`[CHATBOT] ${message}`)
 logger.weather = (message) => logger.info(`[WEATHER] ${message}`)
-logger.api = (message) => logger.info(`[API] ${message}`)
 
 module.exports = logger

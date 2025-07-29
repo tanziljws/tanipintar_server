@@ -1,6 +1,6 @@
 require('dotenv').config()
 
-const { connectRedis } = require('./src/utils/tokenBlacklist')
+const { connectRedis } = require('./src/utils/redis/redisClient')
 const { pool, connectToDatabase } = require('./src/config/db')
 const app = require('./app')
 const logger = require('./src/utils/logger')
