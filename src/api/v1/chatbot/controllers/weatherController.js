@@ -1,5 +1,5 @@
 const WeatherService = require("../services/weatherService")
-const logger = require("../utils/logger")
+const logger = require("../../../../utils/logger")
 
 class WeatherController {
     constructor() {

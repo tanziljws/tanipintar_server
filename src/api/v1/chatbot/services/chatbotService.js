@@ -1,6 +1,6 @@
 const axios = require("axios")
 const WeatherService = require("./weatherService")
-const logger = require("../utils/logger")
+const logger = require("../../../../utils/logger")
 
 class ChatbotService {
     constructor(apiKey = null, model = null, systemPrompt = null) {

@@ -1,27 +1,34 @@
-const jwt = require('jsonwebtoken')
-const { parse, format } = require('date-fns')
-
 const { v4: uuidv4 } = require('uuid')
-const { addToBlacklist } = require('../utils/redis/tokenBlacklist')
-const { hashPassword, comparePassword } = require('../utils/hash')
-const { redisClient } = require('../utils/redis/redisClient')
-const { pool } = require('../config/db')
-const logger = require('../utils/logger')
+const { parse, format } = require('date-fns')
+const jwt = require('jsonwebtoken')
+
+const { addToBlacklist } = require('../../../utils/redis/tokenBlacklist')
+const { hashPassword, comparePassword } = require('../../../utils/hash')
+const { pool } = require('../../../config/db')
+const { redisClient } = require('../../../utils/redis/redisClient')
+const logger = require('../../../utils/logger')
+
+// Mask email for logging
+const maskEmail = (email) => {
+  const [name, domain] = email.split("@")
+  return `${name[0]}***${name.slice(-1)}@${domain}`
+}
 
 // REGISTER
 const register = async (req, res, next) => {
   const { email, full_name, ktp_number, birthplace, birthdate, password } = req.body
+  const ip = req.ip
 
   try {
     const existingUser = await pool.query('SELECT id FROM users WHERE email = $1', [email])
     if (existingUser.rows.length > 0) {
-      logger.security(`Registrasi gagal: Email sudah terdaftar (${email})`)
+      logger.security(`Registrasi gagal: Email sudah terdaftar (${maskEmail(email)}), IP: ${ip}`)
       return res.status(409).json({ message: 'Email sudah terdaftar' })
     }
 
     const existingKTP = await pool.query('SELECT id FROM users WHERE ktp_number = $1', [ktp_number])
     if (existingKTP.rows.length > 0) {
-      logger.security(`Registrasi gagal: Nomor KTP sudah terdaftar (${ktp_number})`)
+      logger.security(`Registrasi gagal: Nomor KTP sudah terdaftar, IP: ${ip}`)
       return res.status(409).json({ message: 'Nomor KTP sudah terdaftar' })
     }
 
@@ -35,7 +42,7 @@ const register = async (req, res, next) => {
       VALUES ($1, $2, $3, $4, $5, $6)
     `, [email, full_name, ktp_number, birthplace, formattedBirthdate, password_hash])
 
-    logger.auth(`Registrasi berhasil: ${email}`)
+    logger.auth(`Registrasi berhasil: ${maskEmail(email)}, IP: ${ip}`)
     return res.status(201).json({ message: 'Registrasi berhasil' })
   } catch (err) {
     err.source = 'register'
@@ -46,16 +53,19 @@ const register = async (req, res, next) => {
 // LOGIN
 const login = async (req, res, next) => {
   const { email, password } = req.body
+  const ip = req.ip
 
   try {
     const result = await pool.query('SELECT * FROM users WHERE email = $1', [email])
     if (result.rows.length === 0) {
+      logger.security(`Login gagal: Email tidak ditemukan (${maskEmail(email)}), IP: ${ip}`)
       return res.status(404).json({ message: 'Email tidak ditemukan' })
     }
 
     const user = result.rows[0]
     const isMatch = await comparePassword(password, user.password_hash)
     if (!isMatch) {
+      logger.security(`Login gagal: Password salah (${maskEmail(email)}), IP: ${ip}`)
       return res.status(401).json({ message: 'Password salah' })
     }
 
@@ -75,7 +85,7 @@ const login = async (req, res, next) => {
 
     await redisClient.set(`refresh_${jti}`, refreshToken, { EX: 7 * 24 * 60 * 60 })
 
-    logger.auth(`Login berhasil: ${email}`)
+    logger.auth(`Login berhasil: ${maskEmail(email)}, IP: ${ip}`)
     return res.json({
       message: 'Login berhasil',
       access_token: accessToken,
@@ -94,6 +104,8 @@ const login = async (req, res, next) => {
 
 // LOGOUT
 const logout = async (req, res, next) => {
+  const ip = req.ip
+
   try {
     const authHeader = req.headers.authorization
     const token = authHeader?.split(' ')[1]
@@ -106,16 +118,16 @@ const logout = async (req, res, next) => {
     try {
       decoded = jwt.verify(token, process.env.JWT_SECRET)
     } catch (err) {
-      logger.security(`Logout gagal: token tidak valid atau kadaluwarsa (${err.message})`)
+      logger.security(`Logout gagal: token tidak valid atau kadaluwarsa (${err.message}), IP: ${ip}`)
       return res.status(401).json({ message: 'Token tidak valid atau kadaluwarsa' })
     }
 
     const jti = decoded.jti
     const exp = decoded.exp * 1000
 
-    // Optional: pengecekan manual expiry
+    // Opsional: pengecekan manual expiry
     if (Date.now() > exp) {
-      logger.security(`Logout: token sudah kadaluwarsa (JTI: ${jti})`)
+      logger.security(`Logout: token sudah kadaluwarsa (JTI: ${jti}), IP: ${ip}`)
       return res.status(400).json({ message: 'Token sudah kedaluwarsa' })
     }
 
@@ -123,7 +135,7 @@ const logout = async (req, res, next) => {
     await addToBlacklist(jti, exp)
     await redisClient.del(`refresh_${jti}`)
 
-    logger.auth(`Logout: ${decoded.email} (JTI: ${jti} diblacklist)`)
+    logger.auth(`Logout: ${maskEmail(decoded.email)} (JTI: ${jti}), IP: ${ip}`)
 
     return res.json({ message: 'Logout berhasil' })
   } catch (err) {
@@ -135,6 +147,7 @@ const logout = async (req, res, next) => {
 // REFRESH TOKEN
 const refreshToken = async (req, res, next) => {
   const { refresh_token } = req.body
+  const ip = req.ip
 
   if (!refresh_token) {
     return res.status(401).json({ message: 'Refresh token tidak ditemukan' })
@@ -147,14 +160,14 @@ const refreshToken = async (req, res, next) => {
     // 1. Pastikan token ada di Redis (rotating logic utama)
     const storedToken = await redisClient.get(`refresh_${oldJti}`)
     if (!storedToken) {
-      logger.security(`Refresh token tidak berlaku atau sudah digunakan (JTI: ${oldJti}, email: ${decoded.email})`)
+      logger.security(`Refresh token tidak berlaku atau sudah digunakan (JTI: ${oldJti}, email: ${maskEmail(decoded.email)}), IP: ${ip}`)
       return res.status(403).json({ message: 'Refresh token sudah tidak berlaku (sudah digunakan atau kedaluwarsa)' })
     }
 
     // 2. Cegah replay attack
     if (storedToken !== refresh_token) {
       // Jika token sama jti-nya tapi value beda → reuse!
-      logger.security(`Refresh token reuse terdeteksi (JTI ${oldJti}, email: ${decoded.email})`)
+      logger.security(`Refresh token reuse terdeteksi (JTI ${oldJti}, email: ${maskEmail(decoded.email)}), IP: ${ip}`)
       return res.status(403).json({ message: 'Refresh token tidak valid (kemungkinan reuse)' })
     }
 
@@ -183,7 +196,7 @@ const refreshToken = async (req, res, next) => {
       .exec()
 
     // 6. Audit log
-    logger.auth(`Refresh token berhasil: User ${decoded.email} (ID: ${decoded.id}), JTI: ${oldJti} → ${newJti}`)
+    logger.auth(`Refresh token berhasil: User ${maskEmail(decoded.email)} (UID: ${decoded.id}), JTI: ${oldJti} → ${newJti}, IP: ${ip}`)
 
     return res.json({
       access_token: newAccessToken,
@@ -192,7 +205,7 @@ const refreshToken = async (req, res, next) => {
 
   } catch (err) {
     err.source = 'refreshToken'
-    logger.security(`Refresh token GAGAL diverifikasi: ${err.message}`)
+    logger.security(`Refresh token GAGAL diverifikasi: ${err.message}, IP: ${ip}`)
     return res.status(401).json({ message: 'Refresh token tidak valid atau kadaluwarsa' })
   }
 }

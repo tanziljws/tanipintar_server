@@ -1,5 +1,5 @@
 const ChatbotService = require("../services/chatbotService")
-const logger = require("../utils/logger")
+const logger = require("../../../../utils/logger")
 
 class ChatbotController {
     constructor() {

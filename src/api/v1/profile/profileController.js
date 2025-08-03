@@ -1,8 +1,8 @@
 const { format } = require('date-fns')
 
-const { hashPassword, comparePassword } = require('../utils/hash')
-const { pool } = require('../config/db')
-const logger = require('../utils/logger')
+const { hashPassword, comparePassword } = require('../../../utils/hash')
+const { pool } = require('../../../config/db')
+const logger = require('../../../utils/logger')
 
 // GET PROFILE
 const getProfile = async (req, res, next) => {
