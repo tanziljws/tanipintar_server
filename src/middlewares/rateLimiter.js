@@ -9,6 +9,22 @@ const isLocalhost = (ip) => {
   )
 }
 
+const globalRateLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 menit
+  max: 100, // Maks 100 permintaan per 15 menit
+  skip: (req) => req.path.startsWith("/v1/") || isLocalhost(req.ip),
+  handler: (req, res) => {
+    logLimit(req)
+    return res.status(429).json({
+      status: "fail",
+      message: "Terlalu banyak permintaan dari IP ini. Coba lagi nanti.",
+    })
+  },
+  standardHeaders: true,
+  legacyHeaders: false,
+  validateProxy: true,
+})
+
 const loginRateLimiter = rateLimit({
   windowMs: 5 * 60 * 1000, // 5 menit
   max: 5, // maksimal 5 permintaan login per 5 menit
@@ -49,6 +65,7 @@ const registerRateLimiter = rateLimit({
 })
 
 module.exports = {
+  globalRateLimiter,
   loginRateLimiter,
   refreshRateLimiter,
   registerRateLimiter

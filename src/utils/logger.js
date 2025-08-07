@@ -23,7 +23,7 @@ const logger = createLogger({
       maxSize: "20m",
       maxFiles: "14d",
     }),
-    ...(isDevelopment ? [new transports.Console()] : []),
+    new transports.Console()
   ],
 })
 

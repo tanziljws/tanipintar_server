@@ -1,5 +1,12 @@
 require("dotenv").config()
 
+const {
+    globalRateLimiter,
+    loginRateLimiter,
+    refreshRateLimiter,
+    registerRateLimiter,
+} = require("./src/middlewares/rateLimiter")
+
 const express = require("express")
 const cors = require("cors")
 
@@ -10,17 +17,17 @@ const v1Routes = require("./src/api/v1")
 
 const app = express()
 
-app.set("trust proxy", true)
+app.set("trust proxy", 1)
 app.use(express.json())
 
 app.use(cors({
-    origin: "https://api.tanipintar.my.id",
     methods: ["GET", "POST", "PUT", "DELETE"],
     credentials: true,
     allowedHeaders: ["Content-Type", "Authorization"]
 }))
 
 app.use(secureHeaders)
+app.use(globalRateLimiter)
 
 // Middleware perlindungan User-Agent
 if (process.env.NODE_ENV === 'production') {
