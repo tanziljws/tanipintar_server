@@ -79,6 +79,22 @@ app.get("/health", (req, res) => {
     })
 })
 
+// Debug endpoint to check routes
+app.get("/debug/routes", (req, res) => {
+    res.json({
+        status: "success",
+        message: "Available routes",
+        routes: [
+            "/v1/auth/login",
+            "/v1/auth/register", 
+            "/v1/garden",
+            "/v1/profile",
+            "/v1/chatbot",
+            "/v1/weather"
+        ]
+    })
+})
+
 app.use(errorHandler)
 
 module.exports = app
