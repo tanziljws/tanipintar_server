@@ -8,11 +8,29 @@ const logger = require('./src/utils/logger')
 const PORT = process.env.PORT || 4000
 
 const startServer = async () => {
-  await connectToDatabase()
-  await connectRedis()
+  // Try to connect to database, but don't fail if it's not ready
+  try {
+    await connectToDatabase()
+    logger.info('Database connected successfully')
+  } catch (error) {
+    logger.error(`Database connection failed: ${error.message}`)
+    logger.info('Server will start anyway - database can be connected later')
+  }
 
-  const server = app.listen(PORT, '', () => {
+  // Try to connect to Redis, but don't fail if it's not ready
+  try {
+    await connectRedis()
+    logger.info('Redis connected successfully')
+  } catch (error) {
+    logger.error(`Redis connection failed: ${error.message}`)
+    logger.info('Server will start anyway - Redis is optional')
+  }
+
+  const server = app.listen(PORT, '0.0.0.0', () => {
+    logger.info(`TaniPintar Backend is running!`)
     logger.info(`HTTP Server running on port ${PORT}`)
+    logger.info(`Environment: ${process.env.NODE_ENV || 'development'}`)
+    logger.info(`Health check endpoint: http://localhost:${PORT}/health`)
   })
 
   let isShuttingDown = false

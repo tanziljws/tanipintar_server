@@ -70,12 +70,47 @@ app.use((req, res, next) => {
 
 app.use("/v1", v1Routes)
 
-app.get("/health", (req, res) => {
+app.get("/health", async (req, res) => {
+    const { pool } = require('./src/config/db')
+    const { redisClient } = require('./src/utils/redis/redisClient')
+    
+    // Check database connection
+    let dbStatus = 'disconnected'
+    try {
+        const client = await pool.connect()
+        await client.query('SELECT 1')
+        client.release()
+        dbStatus = 'connected'
+    } catch (error) {
+        dbStatus = `error: ${error.message}`
+    }
+    
+    // Check Redis connection
+    let redisStatus = 'disconnected'
+    try {
+        if (redisClient && redisClient.isOpen) {
+            await redisClient.ping()
+            redisStatus = 'connected'
+        }
+    } catch (error) {
+        redisStatus = `error: ${error.message}`
+    }
+    
     res.json({
         status: "success",
         message: "TaniPintar Backend is running!",
         timestamp: new Date().toISOString(),
         environment: process.env.NODE_ENV || "development",
+        uptime: process.uptime(),
+        services: {
+            database: dbStatus,
+            redis: redisStatus,
+            mqtt: {
+                host: process.env.MQTT_BROKER_HOST || 'not configured',
+                username: process.env.MQTT_USERNAME || 'not configured'
+            }
+        },
+        version: "1.0.0"
     })
 })
 
