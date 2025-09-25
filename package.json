@@ -10,14 +10,14 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/ADARIYA0/tanipintar-backend.git"
+    "url": "git+https://github.com/tanziljws/tanipintar_server.git"
   },
   "author": "",
   "license": "ISC",
   "bugs": {
-    "url": "https://github.com/ADARIYA0/tanipintar-backend/issues"
+    "url": "https://github.com/tanziljws/tanipintar_server/issues"
   },
-  "homepage": "https://github.com/ADARIYA0/tanipintar-backend#readme",
+  "homepage": "https://github.com/tanziljws/tanipintar_server#readme",
   "description": "",
   "dependencies": {
     "axios": "^1.10.0",
