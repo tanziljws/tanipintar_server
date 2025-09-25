@@ -13,13 +13,29 @@ requiredEnv.forEach(key => {
 })
 
 const useSSL = process.env.DB_USE_SSL === 'true'
-const sslConfig = useSSL
-  ? {
-    rejectUnauthorized: true,
-    ca: fs.readFileSync(path.join(__dirname, '../../certs/global-bundle.pem')).toString()
+let sslConfig = false
+
+if (useSSL) {
+  // Check if we have a custom SSL certificate file
+  const certPath = path.join(__dirname, '../../certs/global-bundle.pem')
+  
+  if (fs.existsSync(certPath)) {
+    // Use custom certificate file (for AWS RDS, etc.)
+    sslConfig = {
+      rejectUnauthorized: true,
+      ca: fs.readFileSync(certPath).toString()
+    }
+    logger.info('DATABASE SSL: Using custom certificate file')
+  } else {
+    // Use Railway/Heroku style SSL (no certificate file needed)
+    sslConfig = {
+      rejectUnauthorized: false
+    }
+    logger.info('DATABASE SSL: Using Railway/Heroku style SSL')
   }
-  : false
-logger.info(`DATABASE SSL ENABLED: ${useSSL}`)
+} else {
+  logger.info('DATABASE SSL: Disabled')
+}
 
 const pool = new Pool({
   host: process.env.DB_HOST,
