@@ -1,7 +1,7 @@
 const { v4: uuidv4 } = require('uuid')
 const { parse, format } = require('date-fns')
-const jwt = require('jsonwebtoken')
 
+const jwtConfig = require('../../../config/jwt')
 const { addToBlacklist } = require('../../../utils/redis/tokenBlacklist')
 const { hashPassword, comparePassword } = require('../../../utils/hash')
 const { pool } = require('../../../config/db')
@@ -69,27 +69,23 @@ const login = async (req, res, next) => {
       return res.status(401).json({ message: 'Password salah' })
     }
 
+    // Generate secure token pair using JWT config
+    const tokenPair = jwtConfig.generateTokenPair({
+      userId: user.id,
+      email: user.email,
+      name: user.full_name
+    })
+
+    // Store refresh token in Redis for rotation security
     const jti = uuidv4()
-
-    const accessToken = jwt.sign(
-      { id: user.id, email: user.email, jti },
-      process.env.JWT_SECRET,
-      { expiresIn: '15m' }
-    )
-
-    const refreshToken = jwt.sign(
-      { id: user.id, email: user.email, jti },
-      process.env.JWT_REFRESH_SECRET,
-      { expiresIn: '7d' }
-    )
-
-    await redisClient.set(`refresh_${jti}`, refreshToken, { EX: 7 * 24 * 60 * 60 })
+    await redisClient.set(`refresh_${jti}`, tokenPair.refreshToken, { 
+      EX: 7 * 24 * 60 * 60 // 7 days
+    })
 
     logger.auth(`Login berhasil: ${maskEmail(email)}, IP: ${ip}`)
     return res.json({
       message: 'Login berhasil',
-      access_token: accessToken,
-      refresh_token: refreshToken,
+      ...tokenPair,
       user: {
         id: user.id,
         full_name: user.full_name,
@@ -116,9 +112,9 @@ const logout = async (req, res, next) => {
 
     let decoded
     try {
-      decoded = jwt.verify(token, process.env.JWT_SECRET)
-    } catch (err) {
-      logger.security(`Logout gagal: token tidak valid atau kadaluwarsa (${err.message}), IP: ${ip}`)
+      decoded = jwtConfig.verifyAccessToken(token)
+    } catch (error) {
+      logger.security(`Logout gagal: token tidak valid atau kadaluwarsa (${error.message}), IP: ${ip}`)
       return res.status(401).json({ message: 'Token tidak valid atau kadaluwarsa' })
     }
 
@@ -154,8 +150,8 @@ const refreshToken = async (req, res, next) => {
   }
 
   try {
-    const decoded = jwt.verify(refresh_token, process.env.JWT_REFRESH_SECRET)
-    const oldJti = decoded.jti
+    const decoded = jwtConfig.verifyRefreshToken(refresh_token)
+    const oldJti = decoded.jti || uuidv4() // fallback if no jti
 
     // 1. Pastikan token ada di Redis (rotating logic utama)
     const storedToken = await redisClient.get(`refresh_${oldJti}`)
@@ -174,38 +170,31 @@ const refreshToken = async (req, res, next) => {
     // 3. Blacklist token lama
     await addToBlacklist(oldJti, decoded.exp * 1000)
 
-    // 4. Generate JTI baru dan token baru
+    // 4. Generate token pair baru dengan JWT config
+    const newTokenPair = jwtConfig.generateTokenPair({
+      userId: decoded.userId,
+      email: decoded.email,
+      name: decoded.name || 'User'
+    })
+
     const newJti = uuidv4()
-
-    const newAccessToken = jwt.sign(
-      { id: decoded.id, email: decoded.email, jti: newJti },
-      process.env.JWT_SECRET,
-      { expiresIn: '15m' }
-    )
-
-    const newRefreshToken = jwt.sign(
-      { id: decoded.id, email: decoded.email, jti: newJti },
-      process.env.JWT_REFRESH_SECRET,
-      { expiresIn: '7d' }
-    )
 
     // 5. Simpan token baru, hapus token lama
     await redisClient.multi()
       .del(`refresh_${oldJti}`)
-      .set(`refresh_${newJti}`, newRefreshToken, { EX: 7 * 24 * 60 * 60 })
+      .set(`refresh_${newJti}`, newTokenPair.refreshToken, { EX: 7 * 24 * 60 * 60 })
       .exec()
 
     // 6. Audit log
-    logger.auth(`Refresh token berhasil: User ${maskEmail(decoded.email)} (UID: ${decoded.id}), JTI: ${oldJti} → ${newJti}, IP: ${ip}`)
+    logger.auth(`Refresh token berhasil: User ${maskEmail(decoded.email)} (UID: ${decoded.userId}), JTI: ${oldJti} → ${newJti}, IP: ${ip}`)
 
     return res.json({
-      access_token: newAccessToken,
-      refresh_token: newRefreshToken
+      message: 'Token refresh berhasil',
+      ...newTokenPair
     })
 
-  } catch (err) {
-    err.source = 'refreshToken'
-    logger.security(`Refresh token GAGAL diverifikasi: ${err.message}, IP: ${ip}`)
+  } catch (error) {
+    logger.security(`Refresh token GAGAL diverifikasi: ${error.message}, IP: ${ip}`)
     return res.status(401).json({ message: 'Refresh token tidak valid atau kadaluwarsa' })
   }
 }
